@@ -1,0 +1,200 @@
+#include "StdAfx.h"
+#include "Shape.h"
+#include "ReDraw.h"
+#include <string>
+
+#define RGB555
+
+inline bool CShape::IsOutPoint(int nX, int nY)
+{
+	RECT *prtDraw = CReDraw::GetDrawRect();
+	return nX > (int) prtDraw->right || nY > (int) prtDraw->bottom - 1 || nX < prtDraw->left ||  nY < prtDraw->top;
+}
+
+inline void CShape::InViewPos(int& nX, int& nY)
+{
+	RECT *prtDraw = CReDraw::GetDrawRect();
+	nX = max(nX, prtDraw->left);
+	nX = min(nX, prtDraw->right);
+	nY = max(nY, prtDraw->top);
+	nY = min(nY, prtDraw->bottom);
+}
+
+inline UINT16 CShape::GetViewColor(COLORREF col)
+{
+#ifdef RGB555
+	UINT16 byRed = GetRValue(col) >> 3;
+	UINT16 byGreen = GetGValue(col) >> 3;
+	UINT16 byBlue = GetBValue(col) >> 3;
+
+	return (byRed << 10) + (byGreen << 5) + byBlue;
+#else
+	UINT16 byRed = GetRValue(col) >> 3;
+	UINT16 byGreen = GetGValue(col) >> 2;
+	UINT16 byBlue = GetBValue(col) >> 3;
+
+	return (UINT16) ((byRed << 11) + (byGreen << 5) + byBlue);
+#endif
+}
+
+inline UINT16 CShape::GetAlphaColor(UINT16 col16, float fAlpha)
+{
+#ifdef RGB555
+	int nRed   = col16 >> 10;
+	int nGreen = (col16 >> 5) & 0x1F;
+	int nBlue  = col16 & 0x1F;
+
+	nRed = (int)( (float)nRed * fAlpha);
+	nGreen = (int)( (float)nGreen * fAlpha);
+	nBlue = (int)( (float)nBlue * fAlpha);
+
+	return (UINT16) ((nRed << 10) + (nGreen << 5) + nBlue);
+#else
+	int nRed   = col16 >> 11;
+	int nGreen = (col16 >> 5) & 0x3F;
+	int nBlue  = col16 & 0x1F;
+
+	nRed = (int)( (float)nRed * fAlpha);
+	nGreen = (int)( (float)nGreen * fAlpha);
+	nBlue = (int)( (float)nBlue * fAlpha);
+
+	return (UINT16) ((nRed << 11) + (nGreen << 5) + nBlue);
+#endif
+}
+
+UINT16 CShape::GetAlphaColor(int nX, int nY, COLORREF col, float fAlpha)
+{
+	UINT16 colBK = GetPixel(nX, nY);
+	float fValue = 1 - fAlpha;
+
+	int nRed, nGreen, nBlue;
+
+#ifdef RGB555
+	nRed = (int) ((colBK >> 10) * fValue);
+	nGreen = (int) (((colBK >> 5) & 0x1F) * fValue);
+	nBlue = (int) ((colBK & 0x1F) * fValue);
+
+	nRed = (int) (GetRValue(col) * fAlpha + nRed);
+	nGreen = (int) (GetGValue(col) * fAlpha + nGreen);
+	nBlue = (int) (GetBValue(col) * fAlpha + nBlue);
+	return (UINT16) ((nRed << 10) + (nGreen << 5) + nBlue);
+#else
+	nRed = (int) ((colBK >> 11) * fValue);
+	nGreen = (int) (((colBK >> 5) & 0x3F) * fValue);
+	nBlue = (int) ((colBK & 0x1F) * fValue);
+
+	nRed = (int) (GetRValue(col) * fAlpha + nRed);
+	nGreen = (int) (GetGValue(col) * fAlpha + nGreen);
+	nBlue = (int) (GetBValue(col) * fAlpha + nBlue);
+	return (UINT16) ((nRed << 11) + (nGreen << 5) + nBlue);
+#endif
+}
+
+UINT16 CShape::GetAlphaColor(int nX, int nY, UINT16 col16, float fAlpha)
+{
+	UINT16 colBK = GetPixel(nX, nY);
+	float fValue = 1 - fAlpha;
+
+	int nRed, nGreen, nBlue;
+
+#ifdef RGB555
+	nRed = (int) ((colBK >> 10) * fValue);
+	nGreen = (int) (((colBK >> 5) & 0x1F) * fValue);
+	nBlue = (int) ((colBK & 0x1F) * fValue);
+
+	nRed = (int) ((col16 >> 10) * fAlpha + nRed);
+	nGreen = (int) (((col16 >> 5) & 0x1F) * fAlpha + nGreen);
+	nBlue = (int) ((col16 & 0x1F) * fAlpha + nBlue);
+
+	return (UINT16) ((nRed << 10) + (nGreen << 5) + nBlue);
+#else
+	nRed = (int) ((colBK >> 11) * fValue);
+	nGreen = (int) (((colBK >> 5) & 0x3F) * fValue);
+	nBlue = (int) ((colBK & 0x1F) * fValue);
+
+
+	nRed = (int) ((col16 >> 11) * fAlpha + nRed);
+	nGreen = (int) (((col16 >> 5) & 0x3F) * fAlpha + nGreen);
+	nBlue = (int) ((col16 & 0x1F) * fAlpha + nBlue);
+	return (UINT16) ((nRed << 11) + (nGreen << 5) + nBlue);
+#endif
+}
+
+inline void CShape::DrawPixel(int nX, int nY, UINT16 col16)
+{	
+	SIZE *pszBmp = CReDraw::GetBufSize();
+
+	*((UINT16 *) (CReDraw::GetBuffer() + (pszBmp->cy - nY - 1) * CReDraw::s_nPitch  + nX * CReDraw::s_Bpp)) = col16;
+}
+
+inline UINT16 CShape::GetPixel(int nX, int nY)
+{
+	SIZE *pszBmp = CReDraw::GetBufSize();
+	//return *((UINT16 *) (CReDraw::GetBuffer() + nY * CReDraw::s_nPitch + nX * CReDraw::s_Bpp));
+	return *((UINT16 *) (CReDraw::GetBuffer() + (pszBmp->cy - nY - 1) * CReDraw::s_nPitch + nX * CReDraw::s_Bpp));
+}
+
+inline void CShape::DrawPixelTrans(int nX, int nY, UINT16 col16)
+{	
+	UINT16 col;
+	SIZE *pBufSize = CReDraw::GetBufSize();
+	UINT16 *pBuf = ((UINT16 *) (CReDraw::GetBuffer() + (pBufSize->cy - nY  - 1) * CReDraw::GetPitch() + nX * CReDraw::GetBpp()));	
+
+#ifdef RGB555
+	col = (((*pBuf & 0x7C00) >> 2) & 0xf800) | (((*pBuf & 0x03e0) >> 2) & 0x07e0) | (((*pBuf & 0x1f) >> 2) & 0x1f);
+
+	*pBuf = col + (((((col16 & 0x7C00) >> 1)  + ((col16 & 0x7C00) >> 2)) & 0x7C00) | 
+				   ((((col16 & 0x03e0) >> 1)  + ((col16 & 0x03e0) >> 2)) & 0x03e0) | 
+				   ((((col16 & 0x1f)   >> 1)  + ((col16 & 0x1f)   >> 2)) & 0x1f));
+
+#else
+	col = (((*pBuf & 0xf800) >> 2) & 0xf800) | (((*pBuf & 0x07e0) >> 2) & 0x07e0) | (((*pBuf & 0x1f) >> 2) & 0x1f);
+
+	*pBuf = col + (((((col16 & 0xf800) >> 1)  + ((col16 & 0xf800) >> 2)) & 0xf800) | 
+				   ((((col16 & 0x07e0) >> 1)  + ((col16 & 0x07e0) >> 2)) & 0x07e0) | 
+				   ((((col16 & 0x1f)   >> 1)  + ((col16 & 0x1f)   >> 2)) & 0x1f));
+#endif
+}
+
+inline UINT16 CShape::GetAntiAliasColor(UINT16 col, UINT16 colBK, float fDistance)
+{
+	float fValue = 1.0f - fDistance;
+	UINT32 nRed, nGreen, nBlue;
+	nRed = (UINT32) (fValue * (colBK >> 10)) + (UINT32) (fDistance * (col >> 10));
+	nGreen = (UINT32) (fValue * ((colBK >> 5) & 0x1F)) + (UINT32) (fDistance * ((col >> 5) & 0x1F));
+	nBlue = (UINT32) (fValue * (colBK & 0x1F)) + (UINT32) (fDistance * (col & 0x1F));
+
+	return (UINT16) ((nRed << 10) + (nGreen << 5) + nBlue);
+	//return col;
+}
+
+void CShape::SmoothPixel(int nX, int nY, UINT16 *pCol, int nDest, bool bLeft)
+{
+	UINT16 nDestCol = 0;
+
+	if( bLeft )
+	{
+		nDestCol = GetAntiAliasColor(GetPixel(nX, nY), GetPixel(nX+1, nY)/*pCol[nDest+1]*/, 0.7f);
+		DrawPixel(nX, nY, nDestCol);
+
+		nDestCol = GetAntiAliasColor(pCol[nDest+1], GetPixel(nX+1, nY), 0.5f);
+		DrawPixel(nX+1, nY, nDestCol);
+	}
+	else
+	{
+		nDestCol = GetAntiAliasColor(pCol[nDest], GetPixel(nX, nY), 0.5f);
+		DrawPixel(nX, nY, nDestCol);
+
+		nDestCol = GetAntiAliasColor(GetPixel(nX, nY)/*pCol[nDest]*/, GetPixel(nX+1, nY), 0.7f);
+		DrawPixel(nX+1, nY, nDestCol);
+	}
+}
+
+HDC CShape::GetDirectDC()
+{
+	return CReDraw::GetMemoryDC();
+}
+
+void CShape::ReleaseDirectDC(HDC hDC)
+{
+}
